@@ -1,0 +1,196 @@
+IF DB_ID('MoldelectricaFinanciar') IS NULL
+    CREATE DATABASE MoldelectricaFinanciar;
+GO
+
+USE MoldelectricaFinanciar;
+GO
+
+-- Stergem tabelele daca exista (optional, pt dezvoltare)
+IF OBJECT_ID('dbo.Programari', 'U') IS NOT NULL DROP TABLE Programari;
+IF OBJECT_ID('dbo.CalculSalarii', 'U') IS NOT NULL DROP TABLE CalculSalarii;
+IF OBJECT_ID('dbo.Angajati', 'U') IS NOT NULL DROP TABLE Angajati;
+IF OBJECT_ID('dbo.LogAudit', 'U') IS NOT NULL DROP TABLE LogAudit;
+IF OBJECT_ID('dbo.Rapoarte', 'U') IS NOT NULL DROP TABLE Rapoarte;
+IF OBJECT_ID('dbo.Exporturi', 'U') IS NOT NULL DROP TABLE Exporturi;
+IF OBJECT_ID('dbo.Bugete', 'U') IS NOT NULL DROP TABLE Bugete;
+IF OBJECT_ID('dbo.Repartizari', 'U') IS NOT NULL DROP TABLE Repartizari;
+IF OBJECT_ID('dbo.ReguliRepartizare', 'U') IS NOT NULL DROP TABLE ReguliRepartizare;
+IF OBJECT_ID('dbo.Tranzactii', 'U') IS NOT NULL DROP TABLE Tranzactii;
+IF OBJECT_ID('dbo.Utilizatori', 'U') IS NOT NULL DROP TABLE Utilizatori;
+IF OBJECT_ID('dbo.CentreResponsabilitate', 'U') IS NOT NULL DROP TABLE CentreResponsabilitate;
+GO
+
+-- Centre de responsabilitate
+CREATE TABLE CentreResponsabilitate (
+    ID_CentruResponsabil CHAR(10) PRIMARY KEY,
+    Nume_Centru NVARCHAR(100) NOT NULL,
+    Tip_Centru NVARCHAR(50) NULL
+);
+
+-- Utilizatori (cu rol: admin / client)
+CREATE TABLE Utilizatori (
+    ID_Utilizator CHAR(13) PRIMARY KEY,
+    IDNP CHAR(13) NOT NULL,
+    Nume NVARCHAR(50) NOT NULL,
+    Prenume NVARCHAR(50) NOT NULL,
+    Email NVARCHAR(100) NOT NULL,
+    Telefon NVARCHAR(20) NULL,
+    Login NVARCHAR(50) NOT NULL UNIQUE,
+    Parola NVARCHAR(200) NOT NULL,
+    Tip_Cont NVARCHAR(20) NOT NULL   -- admin / client / financiar etc.
+);
+
+-- Tranzactii (venituri / cheltuieli)
+CREATE TABLE Tranzactii (
+    ID_Transactie CHAR(13) PRIMARY KEY,
+    Tip_Operatiune NVARCHAR(10) NOT NULL,      -- Venit / Cheltuiala
+    Suma DECIMAL(15,2) NOT NULL,
+    Data_Operatiune DATE NOT NULL,
+    Descriere NVARCHAR(100) NULL,
+    ID_CentruResponsabil CHAR(10) NULL
+        REFERENCES CentreResponsabilitate(ID_CentruResponsabil)
+);
+
+-- Reguli de repartizare
+CREATE TABLE ReguliRepartizare (
+    ID_Regula CHAR(13) PRIMARY KEY,
+    Descriere_Regula NVARCHAR(100) NOT NULL,
+    Tip_Criteriu NVARCHAR(50) NOT NULL,     -- Tip_Operatiune / Centru / Suma etc.
+    Valoare_Criteriu NVARCHAR(50) NULL,
+    Procent_Repartizare DECIMAL(5,2) NOT NULL
+);
+
+-- Repartizari (rezultatul repartizarii automate)
+CREATE TABLE Repartizari (
+    ID_Repartizare CHAR(13) PRIMARY KEY,
+    ID_Transactie CHAR(13) NOT NULL
+        REFERENCES Tranzactii(ID_Transactie),
+    ID_CentruResponsabil CHAR(10) NOT NULL
+        REFERENCES CentreResponsabilitate(ID_CentruResponsabil),
+    Procent_Repartizare DECIMAL(5,2) NOT NULL,
+    Coeficient DECIMAL(5,2) NULL
+);
+
+-- Bugete
+CREATE TABLE Bugete (
+    ID_Buget CHAR(13) PRIMARY KEY,
+    ID_CentruResponsabil CHAR(10) NOT NULL
+        REFERENCES CentreResponsabilitate(ID_CentruResponsabil),
+    An_Buget CHAR(4) NOT NULL,
+    Suma_Alocata DECIMAL(15,2) NOT NULL,
+    Suma_EfectivaCheltuita DECIMAL(15,2) NOT NULL DEFAULT 0,
+    Status_Executie NVARCHAR(20) NULL       -- In limita / Depasit / Subutilizat
+);
+
+-- Exporturi catre sisteme contabile
+CREATE TABLE Exporturi (
+    ID_Export CHAR(13) PRIMARY KEY,
+    ID_Transactie CHAR(13) NOT NULL
+        REFERENCES Tranzactii(ID_Transactie),
+    Sistem_Export NVARCHAR(50) NOT NULL,
+    Data_Exportata DATE NOT NULL,
+    Suma_Exportata DECIMAL(15,2) NOT NULL
+);
+
+-- Metadate rapoarte
+CREATE TABLE Rapoarte (
+    ID_Raport CHAR(13) PRIMARY KEY,
+    Perioada NVARCHAR(7) NOT NULL,          -- ex: 2025-01, 2025Q1
+    Tip_Raport NVARCHAR(20) NOT NULL,
+    ID_CentruResponsabil CHAR(10) NULL
+        REFERENCES CentreResponsabilitate(ID_CentruResponsabil),
+    Descriere NVARCHAR(100) NULL
+);
+
+-- Log audit
+CREATE TABLE LogAudit (
+    ID_Log CHAR(13) PRIMARY KEY,
+    ID_Utilizator CHAR(13) NULL
+        REFERENCES Utilizatori(ID_Utilizator),
+    Tip_Actiune NVARCHAR(20) NOT NULL,   -- Login / Adaugare / Modificare / Stergere / Export / Raport etc.
+    Data_Ora DATETIME2 NOT NULL,
+    Descriere NVARCHAR(150) NULL
+);
+
+-- Angajati
+CREATE TABLE Angajati (
+    IDNP CHAR(13) PRIMARY KEY,
+    Nume NVARCHAR(50) NOT NULL,
+    Prenume NVARCHAR(50) NOT NULL,
+    Email NVARCHAR(100) NULL,
+    Telefon NVARCHAR(20) NULL,
+    Functie NVARCHAR(50) NOT NULL,
+    Data_Angajarii DATE NOT NULL,
+    Salariu_Baza DECIMAL(15,2) NOT NULL
+);
+
+-- Calcul salarii
+CREATE TABLE CalculSalarii (
+    ID_Calcul CHAR(13) PRIMARY KEY,
+    IDNP CHAR(13) NOT NULL
+        REFERENCES Angajati(IDNP),
+    Luna CHAR(7) NOT NULL,              -- 2025-01
+    Nr_Ore_Lucrate INT NOT NULL,
+    Salariu_Calculat DECIMAL(15,2) NOT NULL
+);
+
+-- Programari clienti
+CREATE TABLE Programari (
+    ID_Programare CHAR(13) PRIMARY KEY,
+    ID_Client CHAR(13) NOT NULL,
+    Data_Programarii DATE NOT NULL,
+    Ora_Programarii CHAR(5) NOT NULL,  -- HH:MM
+    Serviciu NVARCHAR(100) NOT NULL,
+    Responsabil NVARCHAR(100) NOT NULL
+);
+GO
+
+-- Date de test pentru centre
+INSERT INTO CentreResponsabilitate (ID_CentruResponsabil, Nume_Centru, Tip_Centru) VALUES
+('CR001', 'Departament Financiar', 'Financiar'),
+('CR002', 'Departament IT', 'Tehnic'),
+('CR003', 'Departament Marketing', 'Suport'),
+('CR004', 'Departament Resurse Umane', 'Administrativ'),
+('CR005', 'Departament Operativ', 'Productie');
+
+-- Utilizatori: admin + client simplu
+INSERT INTO Utilizatori
+(ID_Utilizator, IDNP, Nume, Prenume, Email, Telefon, Login, Parola, Tip_Cont)
+VALUES
+('USR0000000001', '1234567890123', 'Popescu', 'Alexandru', 'admin@moldelectrica.md', '060100100', 'admin',  'admin',  'admin'),
+('USR0000000002', '2234567890123', 'Rusu',    'Cristian',   'client@moldelectrica.md','060200200', 'client', 'client','client');
+
+-- Cateva tranzactii de test
+INSERT INTO Tranzactii
+(ID_Transactie, Tip_Operatiune, Suma, Data_Operatiune, Descriere, ID_CentruResponsabil)
+VALUES
+('TR00000000001', 'Venit',      120000.50, '2025-01-15', 'Încasare contract furnizare energie', 'CR001'),
+('TR00000000002', 'Cheltuiala', 45000.00,  '2025-02-01', 'Achiziție echipamente IT',           'CR002'),
+('TR00000000003', 'Cheltuiala', 7800.75,   '2025-02-10', 'Campanie publicitate digitală',      'CR003'),
+('TR00000000004', 'Venit',       95000.00, '2025-03-05', 'Servicii de consultanță energetică', 'CR001'),
+('TR00000000005', 'Cheltuiala', 22000.00,  '2025-03-18', 'Training personal HR',               'CR004');
+
+-- Reguli simple pentru repartizare
+INSERT INTO ReguliRepartizare
+(ID_Regula, Descriere_Regula, Tip_Criteriu, Valoare_Criteriu, Procent_Repartizare)
+VALUES
+('RG00000000001', 'Venituri pentru financiar', 'Tip_Operatiune', 'Venit',      60.00),
+('RG00000000002', 'Venituri pentru operativ',  'Tip_Operatiune', 'Venit',      40.00),
+('RG00000000003', 'Cheltuieli IT pe IT',       'Centru',         'CR002',      70.00),
+('RG00000000004', 'Cheltuieli marketing',      'Centru',         'CR003',      50.00),
+('RG00000000005', 'Cheltuieli HR',             'Centru',         'CR004',      50.00);
+
+-- Bugete
+INSERT INTO Bugete
+(ID_Buget, ID_CentruResponsabil, An_Buget, Suma_Alocata, Suma_EfectivaCheltuita, Status_Executie)
+VALUES
+('BG00000000001', 'CR001', '2025', 500000.00, 120000.00, 'In limita'),
+('BG00000000002', 'CR002', '2025', 200000.00, 45000.00,  'Subutilizat');
+
+-- Angajati
+INSERT INTO Angajati
+(IDNP, Nume, Prenume, Email, Telefon, Functie, Data_Angajarii, Salariu_Baza)
+VALUES
+('1700101000011', 'Rusu', 'Daniel', 'daniel.rusu@moldelectrica.md', '069111111', 'Inginer',   '2020-02-15', 12000),
+('1700202000022', 'Matei','Iulia',  'iulia.matei@moldelectrica.md', '069222222', 'Economist', '2019-06-01', 14000);
+GO
